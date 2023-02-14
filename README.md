@@ -20,8 +20,9 @@ Se incluye también una memoria explicativa en la que se contempla el desarrollo
 - RStudio
 
 ### Autoras
-
-Claudia Aldana Bilbao
-Irene Pozo Parejo
-Lourdes Martínez Martínez
-Virginia Ordoño Bernier
+<ul>
+            <li>Claudia Aldana Bilbao</li>
+            <li>Irene Pozo Parejo</li>
+            <li>Lourdes Martínez Martínez</li>
+             <li>Virginia Ordoño Bernier</li>
+        </ul>
