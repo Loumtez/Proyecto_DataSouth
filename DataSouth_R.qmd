@@ -1,0 +1,135 @@
+---
+title: "DataSouth_R"
+format: html
+editor: visual
+---
+
+Seleccionamos un modelo de regresion lineal multiple, ya que este tipo de regresion permite predecir el valor de la variable dependiente Y (en este caso el precio), en función de las variables independientes (predictores) de interes.
+
+Respecto a los predictores, se seleccionaron en primer lugar el distrito, tipo de habitacion, numero huespedes, baños, camas, habitaciones, tasa de limpieza, fianza y poli­tica de cancelacion.
+
+Importamos las librerias necesarias y el dataset:
+
+```{r}
+library(tidyverse)
+library(GGally)
+df_out <- read_delim("DataSouth_Rstudio.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
+```
+
+```{r}
+summary(df_out)
+```
+
+Para observar la correlacion entre las variables numericas con el precio:
+
+```{r}
+ggpairs(df_out, columns = c('Price','Accommodates', 'Bathrooms', 'Bedrooms', 'Beds', 'CleaningFee', 'SecurityDeposit'), lower = list(continuous = wrap("points", alpha = 2,size=0.05,color='blue',cardinality_threshold = 8)))
+```
+
+Del analisis preliminar de correlación entre las variables, a priori se pueden extraer las siguientes conclusiones:
+
+-   En general, ninguna de las variables tienen una correlación proxima a 1, por lo que se podria suponer los predictores son independientes y no existira colinealidad en el modelo, aunque habria que comprobarlo por regresion lineal simple de cada uno de los predictores.
+
+-   El precio tiene una mayor correlacion con el número de huéspedes en primer lugar, asi como con el numero de habitaciones, camas y la tasa de limpieza, por lo que cabria esperar que en el modelo, estas variables fueran importantes.
+
+-   Obviamente, el numero de huespedes parece tener una mayor correlacion con el numero de camas y de habitaciones.
+
+Las variables cualitativas se convierten en tipo "factor".
+
+```{r}
+df_out$RoomType<- as.factor(df_out$RoomType)
+contrasts(df_out$RoomType)
+
+df_out$CancellationPolicy<- as.factor(df_out$CancellationPolicy)
+contrasts(df_out$CancellationPolicy)
+
+df_out$Neighbourhood<- as.factor(df_out$Neighbourhood)
+contrasts(df_out$Neighbourhood)
+```
+
+Dividimos los datos en dos grupos: train (df_out.train) y test (df_out.test).
+
+El grupo train contiene el 70% de los datos y sirve para entrenar el modelo. El grupo test sirve para evaluar la calidad del modelo.
+
+```{r}
+idx <- sample(1:nrow(df_out), nrow(df_out)*0.7)
+df_out.train <-df_out[idx,]
+df_out.test <-df_out[-idx,]
+```
+
+Calculamos el modelo con el dataset train.
+
+```{r}
+model0 <- lm(Price ~ Neighbourhood + RoomType + Accommodates + Bathrooms + Beds + Bedrooms + CleaningFee + SecurityDeposit + CancellationPolicy, df_out.train)
+
+summary(model0)
+```
+
+El modelo con todas las variables introducidas como predictores tiene un R\^2 (0.63 aprox) que es capaz de explicar el 63% de la variabilidad observada en el precio. El *p-valor* (Pr) del modelo es significativo (2.2e-16) por lo que se puede aceptar que el modelo no es por azar.
+
+Las variables que mas influencia tienen en el modelo, son las que presentan un p-valor mas bajo. Ademas, observando su grado de confianza (\*), se observa que el numero de camas (Beds) no tendran influencia en el modelo, es decir, el precio del alquiler no va a depender del numero de camas. Asimismo, algunos de los barrios presentaron un p-valor mas alto y un menor grado de confianza, como los barrios de Barajas, El Pardo, Hortaleza, San - Blas - Canillejas, Tetuan, Vicalvaro y Villa de Vallecas.
+
+Por ello, se genero un nuevo modelo sin tener en cuenta el numero de camas para la prediccion.
+
+```{r}
+model <- lm(Price ~ Neighbourhood + RoomType + Accommodates + Bathrooms + Bedrooms + CleaningFee + SecurityDeposit + CancellationPolicy, df_out.train)
+
+summary(model)
+```
+
+Calculamos sus figuras de calidad, tanto en training como en testing.
+
+```{r}
+df_out.train$price_est <- predict(model, df_out.train)
+caret::postResample(pred = df_out.train$price_est, obs=df_out.train$Price)
+
+df_out.test$price_est <- predict(model, df_out.test)
+caret::postResample(pred = df_out.test$price_est, obs=df_out.test$Price)
+
+```
+
+El R\^2 del modelo es proximo a 0.63-0.65 . Ademas sus medidas de RMSE y R\^2 son parecidas, lo que indica que no hay sobreajuste en el modelo.
+
+Observamos los residuos, para asegurar que siguen una distribucion normal, con una varianza constante y unos valores medios tienen centrados en 0.
+
+```{r}
+ggplot(df_out.train, aes(x=Price, y=Price-price_est))+
+  geom_point(color='cornflowerblue', alpha=0.2)+
+  geom_hline(yintercept = 0, color='red')+
+  ggtitle("Residuos en training")
+
+ggplot(df_out.train, aes(x=Price-price_est))+
+  geom_histogram(color='darkblue', fill='cornflowerblue')+
+  ggtitle("Residuos en training")
+
+ggplot(df_out.test, aes(x=Price, y=Price-price_est))+
+  geom_point(color='darkolivegreen4', alpha=0.2)+
+  geom_hline(yintercept = 0, color='red')+
+  ggtitle("Residuos en testing")
+
+ggplot(df_out.test, aes(x=Price-price_est))+
+  geom_histogram(color='darkgreen', fill='darkolivegreen4')+
+  ggtitle("Residuos en testing")
+```
+
+```{r}
+quantile(df_out.test$Price-df_out.test$price_est, c(0.025,0.25,0.50,0.75,0.975))
+```
+
+Se obervo que los residuos siguen una distribución normal tanto en train como en test. Sin embargo, a medida que aumenta la el precio tambien aumenta el error del modelo. Observando la distribución de los residuos, el modelo da unos valores ligeramente pesimistas conforme aumentamos el precio, y optimistas cuando los valores del precio son muy pequeños. Además, los quantiles nos indican que el 95% de las muestras estarán en valores entre -25 y 35 aprox.
+
+De este modo, se obtuvo un modelo de regresion lineal multiple, que permitiera **estimar el precio de un piso en Madrid** teniendo en cuenta el distrito, las caracteristicas del alojamiento, la fianza y el cobro de tasas de limpieza.
+
+Por ejemplo:
+
+Precio estimado de un piso en el centro de Madrid para dos personas, con una habitacion (privada o apartamento entero), un baño y una cama, sin fianza y que cobren las tasas de limpieza.
+
+precio_estimado= 28.62 + 6.07 \* *NeighbourhoodCentro -*22.82 *PrivateRoom* + 3.6 \*2 *Accomodates*+ 5.81 *Bathrooms* + 0.14 *CleaningFee*.
+
+```{r}
+precio_estimado_room=28.62+6.67-22.82+3.6*2+6.21+5.81+0.14
+precio_estimado_apartamento=28.62+6.67+3.6*2+6.21+5.81+0.14
+
+precio_estimado_room
+precio_estimado_apartamento
+```
